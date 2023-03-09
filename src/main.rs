@@ -13,7 +13,7 @@ struct Cli {
     #[clap(long, short, action)]
     keep_dimensions: bool,
 
-    /// Force crop the image to be divisible by the scale factor
+    /// Force crop the image in order for it to be divisible by the scale factor
     #[clap(long, short, action)]
     force_crop: bool,
 
