@@ -20,6 +20,10 @@ struct Cli {
     /// Centre the image if cropping is required
     #[clap(long, short, action)]
     centre: bool,
+
+    /// Use all optional flags
+    #[clap(long, short, action)]
+    all: bool,
 }
 
 fn main() {
@@ -29,9 +33,9 @@ fn main() {
     let (path, scale_factor, keep_dimensions, force_crop, centre) = (
         arguments.path,
         arguments.scale_factor,
-        arguments.keep_dimensions,
-        arguments.force_crop,
-        arguments.centre,
+        arguments.keep_dimensions || arguments.all,
+        arguments.force_crop || arguments.all,
+        arguments.centre || arguments.all,
     );
 
     if scale_factor < 2 || scale_factor > 8 {
