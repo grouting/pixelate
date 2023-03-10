@@ -1,5 +1,8 @@
-use clap::{error::ErrorKind, CommandFactory, Parser};
+use clap::{error::ErrorKind, Command, CommandFactory, Parser};
 use image::{io::Reader as ImageReader, DynamicImage, GenericImage, GenericImageView, Rgba};
+use std::fs;
+use std::path::Path;
+use std::path::PathBuf;
 
 #[derive(Parser)]
 struct Cli {
@@ -26,6 +29,12 @@ struct Cli {
     all: bool,
 }
 
+#[derive(PartialEq)]
+enum ErrorResponse {
+    Ignore,
+    Exit,
+}
+
 fn main() {
     let arguments = Cli::parse();
     let mut command = Cli::command();
@@ -47,30 +56,124 @@ fn main() {
             .exit();
     }
 
-    let mut image = match ImageReader::open(&path) {
-        Ok(file) => match file.decode() {
-            Ok(image) => image,
-            Err(_) => {
-                command
-                    .error(ErrorKind::Io, "could not decode image")
-                    .exit();
-            }
-        },
+    let path_metadata = match fs::metadata(&path) {
+        Ok(metadata) => metadata,
         Err(_) => {
             command.error(ErrorKind::Io, "could not open file").exit();
         }
+    };
+
+    if path_metadata.is_file() {
+        process_image(
+            &mut command,
+            scale_factor,
+            &path,
+            keep_dimensions,
+            force_crop,
+            centre,
+            ErrorResponse::Exit,
+        );
+
+        return;
+    } else if path_metadata.is_dir() {
+        let paths = match fs::read_dir(&path) {
+            Ok(paths) => paths,
+            Err(_) => {
+                command
+                    .error(ErrorKind::Io, "could not read directory")
+                    .exit();
+            }
+        };
+
+        for path in paths {
+            let path = match path {
+                Ok(path) => path,
+                Err(_) => {
+                    command
+                        .error(ErrorKind::Io, "could not read directory")
+                        .exit();
+                }
+            };
+
+            let path = path.path();
+
+            if path.is_file() {
+                process_image(
+                    &mut command,
+                    scale_factor,
+                    &path,
+                    keep_dimensions,
+                    force_crop,
+                    centre,
+                    ErrorResponse::Ignore,
+                );
+            }
+        }
+    }
+}
+
+fn process_image(
+    command: &mut Command,
+    scale_factor: u8,
+    path: &PathBuf,
+    keep_dimensions: bool,
+    force_crop: bool,
+    centre: bool,
+    error_response: ErrorResponse,
+) {
+    let mut image = match ImageReader::open(&path) {
+        Ok(file) => match file.decode() {
+            Ok(image) => image,
+            Err(_) => match error_response {
+                ErrorResponse::Exit => {
+                    command
+                        .error(ErrorKind::Io, "could not decode image")
+                        .exit();
+                }
+                ErrorResponse::Ignore => {
+                    log(
+                        &*format!("could not decode image at '{}'; skipping", path.display()),
+                        LogType::Error,
+                    );
+
+                    return;
+                }
+            },
+        },
+        Err(_) => match error_response {
+            ErrorResponse::Exit => {
+                command.error(ErrorKind::Io, "could not open file").exit();
+            }
+            ErrorResponse::Ignore => {
+                log(
+                    &*format!("could not open file at '{}'; skipping", path.display()),
+                    LogType::Error,
+                );
+
+                return;
+            }
+        },
     };
 
     let (mut width, mut height) = (image.width(), image.height());
 
     if width % (scale_factor as u32) != 0 || height % (scale_factor as u32) != 0 {
         if !force_crop {
-            command
-            .error(
-                ErrorKind::InvalidValue,
-                "image dimensions must be divisible by scale factor. You can force crop the image using the -f flag",
-            )
-            .exit();
+            match error_response {
+                ErrorResponse::Exit => {
+                    command
+                        .error(ErrorKind::Io, "image dimensions must be divisible by scale factor. you can force crop the image using the -f flag")
+                        .exit();
+                }
+                ErrorResponse::Ignore => {
+                    log(
+                        &*format!("image dimensions at '{}' were not divisible by the scale factor. you can force crop the image using the -f flag", path.display()),
+                        LogType::Error,
+                    );
+
+                    return;
+                }
+            }
         } else {
             image = crop_image(&mut image, scale_factor, centre);
             (width, height) = (image.width(), image.height());
@@ -122,11 +225,29 @@ fn main() {
         }
     }
 
+    let directory = &path
+        .ancestors()
+        .nth(1)
+        .unwrap_or_else(|| Path::new("."))
+        .display();
+
     let original_file_name = &path.file_name().unwrap().to_str().unwrap();
 
-    match new_image.save(format!("pixelated_{}", original_file_name)) {
+    match new_image.save(format!("{}/pixelated_{}", directory, original_file_name)) {
         Ok(_) => return,
-        Err(_) => command.error(ErrorKind::Io, "could not save image").exit(),
+        Err(_) => match error_response {
+            ErrorResponse::Exit => {
+                command.error(ErrorKind::Io, "could not save image").exit();
+            }
+            ErrorResponse::Ignore => {
+                log(
+                    &*format!("could not save image at '{}'", path.display()),
+                    LogType::Error,
+                );
+
+                return;
+            }
+        },
     };
 }
 
@@ -168,4 +289,18 @@ fn average_pixels(pixels: &Vec<Rgba<u8>>) -> Rgba<u8> {
         (blue / pixel_count) as u8,
         (alpha / pixel_count) as u8,
     ])
+}
+
+enum LogType {
+    // Info,
+    Error,
+}
+
+fn log(message: &str, log_type: LogType) {
+    let prefix = match log_type {
+        // LogType::Info => "INFO",
+        LogType::Error => "ERROR",
+    };
+
+    println!("{}: {}", prefix, message);
 }
