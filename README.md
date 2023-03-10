@@ -11,6 +11,7 @@ pixelate <input> <scale_factor> [options]
  | `-k` | Keep the dimensions of the output image the same as the input |
  | `-f` | Force crop the image in order for it to be divisible by the scale factor |
  | `-c` | Centre the image if cropping is required |
+ | `-o` | Overwrite the input image |
  | `-a` | Use all optional flags |
 
 ## Examples
@@ -25,4 +26,10 @@ Retains the dimensions, and crops the image to be divisible by the scale factor
 pixelate burning_pits_of_hell.png 5 -a
 ```
 
-Centres the image, retains the dimensions, and crops the image to be divisible by the scale factor
+Centres the image, retains the dimensions, crops the image in order for it to be divisible by the scale factor and overwrites the original image
+
+> Equivalent to
+>
+> ```bash
+> pixelate burning_pits_of_hell.png 5 -k -f -c -o
+>```

@@ -24,6 +24,10 @@ struct Cli {
     #[clap(long, short, action)]
     centre: bool,
 
+    /// Overwrite the input image
+    #[clap(long, short, action)]
+    overwrite: bool,
+
     /// Use all optional flags
     #[clap(long, short, action)]
     all: bool,
@@ -39,12 +43,13 @@ fn main() {
     let arguments = Cli::parse();
     let mut command = Cli::command();
 
-    let (path, scale_factor, keep_dimensions, force_crop, centre) = (
+    let (path, scale_factor, keep_dimensions, force_crop, centre, overwrite) = (
         arguments.path,
         arguments.scale_factor,
         arguments.keep_dimensions || arguments.all,
         arguments.force_crop || arguments.all,
         arguments.centre || arguments.all,
+        arguments.overwrite || arguments.all,
     );
 
     if scale_factor < 2 || scale_factor > 8 {
@@ -71,6 +76,7 @@ fn main() {
             keep_dimensions,
             force_crop,
             centre,
+            overwrite,
             ErrorResponse::Exit,
         );
 
@@ -105,6 +111,7 @@ fn main() {
                     keep_dimensions,
                     force_crop,
                     centre,
+                    overwrite,
                     ErrorResponse::Ignore,
                 );
             }
@@ -119,6 +126,7 @@ fn process_image(
     keep_dimensions: bool,
     force_crop: bool,
     centre: bool,
+    overwrite: bool,
     error_response: ErrorResponse,
 ) {
     let mut image = match ImageReader::open(&path) {
@@ -233,7 +241,13 @@ fn process_image(
 
     let original_file_name = &path.file_name().unwrap().to_str().unwrap();
 
-    match new_image.save(format!("{}/pixelated_{}", directory, original_file_name)) {
+    let file_name = if overwrite {
+        format!("{}", original_file_name)
+    } else {
+        format!("pixelated_{}", original_file_name)
+    };
+
+    match new_image.save(format!("{}/{}", directory, file_name)) {
         Ok(_) => return,
         Err(_) => match error_response {
             ErrorResponse::Exit => {
