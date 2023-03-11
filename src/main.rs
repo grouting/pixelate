@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 struct Cli {
-    /// The path of the image that you want to process
+    /// The path of the image or folder of images that you want to process
     path: std::path::PathBuf,
 
     /// The scale factor by which the image will be scaled down (must be a power of two)
@@ -194,9 +194,9 @@ fn process_image(
     );
 
     let mut new_image = if keep_dimensions {
-        image::DynamicImage::new_rgb8(width, height)
+        image::DynamicImage::new_rgba8(width, height)
     } else {
-        image::DynamicImage::new_rgb8(new_width, new_height)
+        image::DynamicImage::new_rgba8(new_width, new_height)
     };
 
     for x in 0..new_width {

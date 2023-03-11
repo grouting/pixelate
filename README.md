@@ -3,7 +3,7 @@
 The basic structure of a pixelate command is as follows:
 
 ```bash
-pixelate <input> <scale_factor> [options]
+pixelate <path> <scale_factor> [options]
 ```
 
  | Option | Description |
