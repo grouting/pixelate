@@ -2,8 +2,12 @@
 name = "pixelate"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT"
+description = "A tool for pixelating images"
+readme = "README.md"
+homepage = "https://github.com/grouting/pixelate"
+repository = "https://github.com/grouting/pixelate"
+keywords = ["cli", "image", "images", "editing"]
 
 [dependencies]
 clap = { version = "4.1.8", features = ["derive"] }
