@@ -39,20 +39,31 @@ enum ErrorResponse {
     Exit,
 }
 
+#[derive(Copy, Clone)]
+struct Options {
+    scale_factor: u8,
+    keep_dimensions: bool,
+    force_crop: bool,
+    centre: bool,
+    overwrite: bool,
+}
+
 fn main() {
     let arguments = Cli::parse();
     let mut command = Cli::command();
 
-    let (path, scale_factor, keep_dimensions, force_crop, centre, overwrite) = (
+    let (path, options) = (
         arguments.path,
-        arguments.scale_factor,
-        arguments.keep_dimensions || arguments.all,
-        arguments.force_crop || arguments.all,
-        arguments.centre || arguments.all,
-        arguments.overwrite || arguments.all,
+        Options {
+            scale_factor: arguments.scale_factor,
+            keep_dimensions: arguments.keep_dimensions || arguments.all,
+            force_crop: arguments.force_crop || arguments.all,
+            centre: arguments.centre || arguments.all,
+            overwrite: arguments.overwrite || arguments.all,
+        },
     );
 
-    if scale_factor < 2 || scale_factor > 8 {
+    if !(2..=8).contains(&options.scale_factor) {
         command
             .error(
                 ErrorKind::InvalidValue,
@@ -69,18 +80,7 @@ fn main() {
     };
 
     if path_metadata.is_file() {
-        process_image(
-            &mut command,
-            scale_factor,
-            &path,
-            keep_dimensions,
-            force_crop,
-            centre,
-            overwrite,
-            ErrorResponse::Exit,
-        );
-
-        return;
+        process_image(&mut command, &path, options, ErrorResponse::Exit);
     } else if path_metadata.is_dir() {
         let paths = match fs::read_dir(&path) {
             Ok(paths) => paths,
@@ -104,16 +104,7 @@ fn main() {
             let path = path.path();
 
             if path.is_file() {
-                process_image(
-                    &mut command,
-                    scale_factor,
-                    &path,
-                    keep_dimensions,
-                    force_crop,
-                    centre,
-                    overwrite,
-                    ErrorResponse::Ignore,
-                );
+                process_image(&mut command, &path, options, ErrorResponse::Ignore);
             }
         }
     }
@@ -121,15 +112,19 @@ fn main() {
 
 fn process_image(
     command: &mut Command,
-    scale_factor: u8,
     path: &PathBuf,
-    keep_dimensions: bool,
-    force_crop: bool,
-    centre: bool,
-    overwrite: bool,
+    options: Options,
     error_response: ErrorResponse,
 ) {
-    let mut image = match ImageReader::open(&path) {
+    let (scale_factor, keep_dimensions, force_crop, centre, overwrite) = (
+        options.scale_factor,
+        options.keep_dimensions,
+        options.force_crop,
+        options.centre,
+        options.overwrite,
+    );
+
+    let mut image = match ImageReader::open(path) {
         Ok(file) => match file.decode() {
             Ok(image) => image,
             Err(_) => match error_response {
@@ -140,7 +135,7 @@ fn process_image(
                 }
                 ErrorResponse::Ignore => {
                     log(
-                        &*format!("could not decode image at '{}'; skipping", path.display()),
+                        &format!("could not decode image at '{}'; skipping", path.display()),
                         LogType::Error,
                     );
 
@@ -154,7 +149,7 @@ fn process_image(
             }
             ErrorResponse::Ignore => {
                 log(
-                    &*format!("could not open file at '{}'; skipping", path.display()),
+                    &format!("could not open file at '{}'; skipping", path.display()),
                     LogType::Error,
                 );
 
@@ -175,7 +170,7 @@ fn process_image(
                 }
                 ErrorResponse::Ignore => {
                     log(
-                        &*format!("image dimensions at '{}' were not divisible by the scale factor. you can force crop the image using the -f flag", path.display()),
+                        &format!("image dimensions at '{}' were not divisible by the scale factor. you can force crop the image using the -f flag", path.display()),
                         LogType::Error,
                     );
 
@@ -242,24 +237,22 @@ fn process_image(
     let original_file_name = &path.file_name().unwrap().to_str().unwrap();
 
     let file_name = if overwrite {
-        format!("{}", original_file_name)
+        original_file_name.to_string()
     } else {
         format!("pixelated_{}", original_file_name)
     };
 
     match new_image.save(format!("{}/{}", directory, file_name)) {
-        Ok(_) => return,
+        Ok(_) => (),
         Err(_) => match error_response {
             ErrorResponse::Exit => {
                 command.error(ErrorKind::Io, "could not save image").exit();
             }
             ErrorResponse::Ignore => {
                 log(
-                    &*format!("could not save image at '{}'", path.display()),
+                    &format!("could not save image at '{}'", path.display()),
                     LogType::Error,
                 );
-
-                return;
             }
         },
     };
